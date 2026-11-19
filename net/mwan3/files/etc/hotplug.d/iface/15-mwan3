@@ -9,6 +9,7 @@ initscript=/etc/init.d/mwan3
 
 
 SCRIPTNAME="mwan3-hotplug"
+[ "$(uci -q get mwan3.globals.enabled)" = 1 ] || exit 0
 [ "$ACTION" = "ifup" ] || [ "$ACTION" = "ifdown" ] || [ "$ACTION" = "connected" ] || [ "$ACTION" = "disconnected" ] || exit 1
 [ -n "$INTERFACE" ] || exit 2
 [ "$FIRSTCONNECT" = "1" ] || [ "$MWAN3_SHUTDOWN" = "1" ] && exit 0

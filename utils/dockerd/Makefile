@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=dockerd
 PKG_VERSION:=29.6.1
-PKG_RELEASE:=1
+PKG_RELEASE:=4
 PKG_LICENSE:=Apache-2.0
 PKG_LICENSE_FILES:=LICENSE
 PKG_CPE_ID:=cpe:/a:mobyproject:moby
@@ -40,14 +40,15 @@ define Package/dockerd
   DEPENDS:=$(ARCH_DEPENDS) \
     +ca-certificates \
     +containerd \
+    +docker \
     +iptables \
     +iptables-mod-extra \
     +IPV6:ip6tables \
     +IPV6:kmod-ipt-nat6 \
     +KERNEL_SECCOMP:libseccomp \
     +kmod-ipt-nat \
-    +kmod-ipt-physdev \
-    +kmod-nf-ipvs \
+    +!TARGET_mediatek_mt6990:kmod-ipt-physdev \
+    +!TARGET_mediatek_mt6990:kmod-nf-ipvs \
     +kmod-veth \
     +tini \
     +uci-firewall
@@ -102,7 +103,7 @@ define Build/Prepare
 endef
 
 BUILDTAGS:=
-ifeq ($(KERNEL_SECCOMP),y)
+ifeq ($(CONFIG_KERNEL_SECCOMP),y)
 BUILDTAGS += seccomp
 endif
 ifeq ($(CONFIG_SELINUX),y)
@@ -119,11 +120,16 @@ define Build/Compile
 endef
 
 define Package/dockerd/install
+	$(INSTALL_DIR) $(1)/usr/libexec
+	$(INSTALL_BIN) ./files/docker-storage-check $(1)/usr/libexec/docker-storage-check
+	$(INSTALL_BIN) ./files/docker-network-sync $(1)/usr/libexec/docker-network-sync
+	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface $(1)/etc/hotplug.d/firewall
+	$(INSTALL_BIN) ./files/dockerd.hotplug $(1)/etc/hotplug.d/iface/91-dockerd
+	$(INSTALL_BIN) ./files/dockerd.hotplug $(1)/etc/hotplug.d/firewall/91-dockerd
 	$(INSTALL_DIR) $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bundles/binary-daemon/dockerd $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/bundles/binary-daemon/docker-proxy $(1)/usr/bin/
 
-	$(INSTALL_DIR) $(1)/opt/docker/
 
   ifeq ($(CONFIG_DOCKER_CHECK_CONFIG),y)
 	$(INSTALL_DIR) $(1)/usr/share/docker/
@@ -136,18 +142,22 @@ define Package/dockerd/install
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/etc/config/dockerd $(1)/etc/config/dockerd
 
+  ifneq ($(CONFIG_TARGET_mediatek_mt6990),y)
 	# Must be after systcl 11-br-netfilter.conf from kmod-br-netfilter
 	$(INSTALL_DIR) $(1)/etc/sysctl.d
 	$(INSTALL_DATA) ./files/etc/sysctl.d/sysctl-br-netfilter-ip.conf \
 		$(1)/etc/sysctl.d/12-br-netfilter-ip.conf
+  endif
+
 endef
 
 define Package/dockerd/postinst
 #!/bin/sh
 [ -n "$$IPKG_INSTROOT" ] || {
-	/etc/init.d/dockerd enable
-	/etc/init.d/dockerd uciadd
-	/etc/init.d/dockerd start
+	[ "$$(uci -q get dockerd.globals.enabled)" != 1 ] || {
+		/etc/init.d/dockerd enable
+		/etc/init.d/dockerd start
+	}
 }
 endef
 

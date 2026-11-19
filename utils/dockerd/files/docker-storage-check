@@ -1,0 +1,23 @@
+#!/bin/sh
+# Validate before dockerd creates anything. No automatic formatting/mounting.
+fail() { logger -t dockerd "Storage check: $1"; echo "$1" >&2; exit 1; }
+# dockerd otherwise auto-attaches to a system containerd with an unchecked root.
+[ ! -S /run/containerd/containerd.sock ] || fail 'External containerd must be stopped before using guarded Docker storage'
+mountpoint="$(uci -q get dockerd.globals.data_mount)"
+root="$(uci -q get dockerd.globals.data_root)"
+[ -n "$mountpoint" ] && [ -n "$root" ] || fail 'Select a persistent data mount and data directory first'
+mountpoint="$(readlink -f "$mountpoint")"
+root="$(readlink -f "$root")"
+case "$mountpoint" in ''|/|/rom|/overlay|/tmp|/tmp/*|/mnt/vendor|/mnt/vendor/*) fail 'System and modem partitions are not Docker storage';; esac
+case "$root" in "$mountpoint"/*) ;; *) fail 'Data directory must be inside the selected mount';; esac
+# Only an actual writable disk filesystem qualifies; a directory in overlay does not.
+awk -v p="$mountpoint" '$2==p && $3 ~ /^(ext4|xfs|btrfs)$/ && $4 ~ /(^|,)rw(,|$)/ { ok=1 } END { exit !ok }' /proc/mounts ||
+	fail 'Persistent data filesystem is not mounted read-write'
+# Reject a system/modem block filesystem remounted under a different path too.
+source="$(awk -v p="$mountpoint" '$2==p { print $1; exit }' /proc/mounts)"
+awk -v d="$source" '$1==d && ($2=="/" || $2=="/rom" || $2=="/overlay" || $2 ~ /^\/mnt\/vendor(\/|$)/) { bad=1 } END { exit bad }' /proc/mounts ||
+	fail 'Data mount aliases a system or modem filesystem'
+available="$(df -Pk "$mountpoint" | awk 'END {print $4}')"
+case "$available" in ''|*[!0-9]*) fail 'Cannot determine free disk space';; esac
+[ "$available" -ge 262144 ] || fail 'Persistent data disk needs at least 256 MiB free'
+exit 0

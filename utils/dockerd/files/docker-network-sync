@@ -1,0 +1,39 @@
+#!/bin/sh
+# Docker owns firewall.docker.device. Only enumerate actual bridge networks;
+# never admit arbitrary br-* interfaces (which also includes br-lan).
+sync_networks() {
+	local ids devices current device
+	ids="$(docker network ls --filter driver=bridge --format '{{.ID}}' --no-trunc 2>/dev/null)" || return 1
+	[ -n "$ids" ] || return 1
+	devices="$(docker network inspect --format '{{if index .Options "com.docker.network.bridge.name"}}{{index .Options "com.docker.network.bridge.name"}}{{else}}br-{{slice .Id 0 12}}{{end}}' $ids 2>/dev/null)" || return 1
+	# Names originate in Docker, but reject invalid syntax before passing to UCI.
+	for device in $devices; do
+		case "$device" in ''|lo|br-lan|*[!a-zA-Z0-9_.:-]*) return 1;; esac
+		[ "${#device}" -le 15 ] || return 1
+	done
+	devices="$(printf '%s\n' "$devices" | sort -u | tr '\n' ' ' | sed 's/ $//')"
+	[ "$(uci -q get firewall.docker)" = zone ] || return 1
+	current="$(uci -q get firewall.docker.device)"
+	if [ "$devices" != "$current" ]; then
+		uci -q delete firewall.docker.device
+		for device in $devices; do uci -q add_list firewall.docker.device="$device" || return 1; done
+		uci -q commit firewall || return 1
+		/etc/init.d/firewall reload || return 1
+	fi
+	/etc/init.d/dockerd refresh_firewall
+}
+
+case "$1" in
+watch)
+	while :; do
+		since="$(date +%s)"
+		if sync_networks; then
+			# Replay events since before the snapshot, closing the snapshot/subscribe race.
+			docker events --since "$since" --filter type=network --filter event=create --filter event=destroy --format '{{.Action}}' 2>/dev/null |
+				while read -r event; do sync_networks; done
+		fi
+		sleep 2
+	done
+	;;
+*) sync_networks;;
+esac

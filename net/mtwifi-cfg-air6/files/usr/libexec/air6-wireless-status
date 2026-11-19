@@ -1,0 +1,18 @@
+#!/bin/sh
+# Read-only, bounded output: no keys, SSIDs or station identities.
+case "$1" in ''|*[!a-zA-Z0-9_]*) exit 1;; esac
+[ "$(uci -q get "wireless.$1")" = wifi-device ] || exit 1
+prefix="$(uci -q get "wireless.$1.main_ifname")"
+case "$prefix" in ra|rai|rax) ;; *) exit 1;; esac
+ifname="${prefix}0"
+info="$(iw dev "$ifname" info 2>/dev/null)"
+channel="$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*channel \([0-9]*\).*/\1/p')"
+width="$(printf '%s\n' "$info" | sed -n 's/.*width: \([0-9]*\) MHz.*/\1/p')"
+state="$(hostapd_cli -p /var/run/hostapd -i "$ifname" status 2>/dev/null | sed -n 's/^state=//p')"
+. /usr/share/libubox/jshn.sh
+json_init
+json_add_string interface "$ifname"
+json_add_string channel "$channel"
+json_add_string width "$width"
+json_add_string state "$state"
+json_dump

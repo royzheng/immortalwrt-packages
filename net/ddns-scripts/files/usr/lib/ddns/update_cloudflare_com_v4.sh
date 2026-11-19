@@ -102,7 +102,7 @@ cloudflare_transfer() {
 	local __CNT=0
 	local __ERR
 	while : ; do
-		write_log 7 "#> $__RUNPROG"
+		write_log 7 "Cloudflare HTTPS request (credentials omitted)"
 		eval "$__RUNPROG"
 		__ERR=$?			# save communication error
 		[ $__ERR -eq 0 ] && break	# no error break while

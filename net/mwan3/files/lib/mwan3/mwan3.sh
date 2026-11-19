@@ -288,6 +288,9 @@ mwan3_set_general_iptables()
 
 		if [ -n "${current##*-N mwan3_hook*}" ]; then
 			mwan3_push_update -N mwan3_hook
+			# OpenClash owns these low-16-bit marks and routing table 0x162.
+			mwan3_push_update -A mwan3_hook -m mark --mark 0x162/0xffff -j RETURN
+			mwan3_push_update -A mwan3_hook -m mark --mark 0x1a0a/0xffff -j RETURN
 			# do not mangle ipv6 ra service
 			if [ "$IPT" = "$IPT6" ]; then
 				mwan3_push_update -A mwan3_hook \
@@ -530,6 +533,9 @@ mwan3_create_iface_rules()
 	$IP rule add pref $((id+1000)) iif "$2" lookup "$id"
 	$IP rule add pref $((id+2000)) fwmark "$(mwan3_id2mask id MMX_MASK)/$MMX_MASK" lookup "$id"
 	$IP rule add pref $((id+3000)) fwmark "$(mwan3_id2mask id MMX_MASK)/$MMX_MASK" unreachable
+	# Persist actual ownership, since the next reload may delete/reorder UCI interfaces.
+	mkdir -p "$MWAN3_STATUS_DIR/owned_rules"
+	printf '%s %s %s %s\n' "$family" "$id" "$(mwan3_id2mask id MMX_MASK)/$MMX_MASK" "$2" > "$MWAN3_STATUS_DIR/owned_rules/$family-$id"
 }
 
 mwan3_delete_iface_rules()
@@ -549,9 +555,27 @@ mwan3_delete_iface_rules()
 		return
 	fi
 
-	for rule_id in $(ip rule list | awk -F : '$1 % 1000 == '$id' && $1 > 1000 && $1 < 4000 {print $1}'); do
-		$IP rule del pref $rule_id
+	# IDs are our per-interface tables; never delete unrelated priority ranges.
+	$IP rule del pref $((id+1000)) lookup "$id" 2>/dev/null
+	$IP rule del pref $((id+2000)) fwmark "$(mwan3_id2mask id MMX_MASK)/$MMX_MASK" lookup "$id" 2>/dev/null
+	$IP rule del pref $((id+3000)) fwmark "$(mwan3_id2mask id MMX_MASK)/$MMX_MASK" unreachable 2>/dev/null
+}
+
+# Stop/reload cleans the installed set, not the potentially changed UCI list.
+mwan3_delete_owned_rules()
+{
+	local record family id mark device IP
+	for record in "$MWAN3_STATUS_DIR"/owned_rules/*; do
+		[ -f "$record" ] || continue
+		read -r family id mark device < "$record"
+		case "$id" in ''|*[!0-9]*) continue;; esac
+		case "$family" in ipv4) IP="$IP4";; ipv6) IP="$IP6";; *) continue;; esac
+		$IP rule del pref $((id+1000)) iif "$device" lookup "$id" 2>/dev/null
+		$IP rule del pref $((id+2000)) fwmark "$mark" lookup "$id" 2>/dev/null
+		$IP rule del pref $((id+3000)) fwmark "$mark" unreachable 2>/dev/null
+		$IP route flush table "$id" 2>/dev/null
 	done
+	return 0
 }
 
 mwan3_delete_iface_ipset_entries()

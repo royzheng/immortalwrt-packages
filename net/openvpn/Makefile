@@ -10,7 +10,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=openvpn
 
 PKG_VERSION:=2.7.8
-PKG_RELEASE:=2
+PKG_RELEASE:=4
 
 PKG_SOURCE_URL:=\
 	https://build.openvpn.net/downloads/releases/ \
@@ -121,6 +121,7 @@ define Package/openvpn-$(BUILD_VARIANT)/install
 	$(INSTALL_DIR) $(1)/usr/share/openvpn
 	$(INSTALL_DATA) \
 		files/usr/share/openvpn/openvpn.options \
+		files/openvpn.config \
 		$(1)/usr/share/openvpn/
 	$(INSTALL_BIN) \
 		files/usr/share/openvpn/up.uc \

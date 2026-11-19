@@ -8,7 +8,7 @@ USE_PROCD=1
 SCRIPTNAME="mwan3-init"
 
 service_running() {
-	[ -d "$MWAN3_STATUS_DIR" ]
+	[ -f "$MWAN3_STATUS_DIR/running" ]
 }
 
 start_tracker() {
@@ -26,8 +26,11 @@ start_tracker() {
 
 start_service() {
 	local enabled hotplug_pids
+	[ "$(uci -q get mwan3.globals.enabled)" = 1 ] || return 0
 
 	mwan3_init
+	# Read-only status commands also create the directory; only start owns this marker.
+	touch "$MWAN3_STATUS_DIR/running"
 	config_foreach start_tracker interface
 
 	mwan3_update_iface_to_table
@@ -57,8 +60,10 @@ start_service() {
 stop_service() {
 	local ipset rule IP IPTR IPT family table tid
 
+	[ -f "$MWAN3_STATUS_DIR/running" ] || return 0
 	mwan3_init
 	config_foreach mwan3_interface_shutdown interface
+	mwan3_delete_owned_rules
 
 	for family in ipv4 ipv6; do
 		if [ "$family" = "ipv4" ]; then
@@ -72,14 +77,9 @@ stop_service() {
 			IP="$IP6"
 		fi
 
-		for tid in $($IP route list table all | sed -ne 's/.*table \([0-9]\+\).*/\1/p' | sort -u); do
-			[ $tid -gt $MWAN3_INTERFACE_MAX ] && continue
-			$IP route flush table $tid &> /dev/null
-		done
-
-		for rule in $($IP rule list | grep -E '^[1-3][0-9]{3}:' | cut -d ':' -f 1); do
-			$IP rule del pref $rule &> /dev/null
-		done
+		# Delete only our marked terminal rules; preserve VPN / OpenClash rules.
+		$IP rule del pref $((MM_BLACKHOLE+2000)) fwmark $MMX_BLACKHOLE/$MMX_MASK blackhole 2>/dev/null
+		$IP rule del pref $((MM_UNREACHABLE+2000)) fwmark $MMX_UNREACHABLE/$MMX_MASK unreachable 2>/dev/null
 		table="$($IPT -S)"
 		{
 			echo "*mangle";

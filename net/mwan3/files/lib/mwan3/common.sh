@@ -162,7 +162,7 @@ mwan3_init()
 		readfile MMX_MASK "${MWAN3_STATUS_DIR}/mmx_mask"
 		MWAN3_INTERFACE_MAX=$(uci_get_state mwan3 globals iface_max)
 	else
-		config_get MMX_MASK globals mmx_mask '0x3F00'
+		config_get MMX_MASK globals mmx_mask '0x003f0000'
 		echo "$MMX_MASK"| tr 'A-F' 'a-f' > "${MWAN3_STATUS_DIR}/mmx_mask"
 		LOG debug "Using firewall mask ${MMX_MASK}"
 

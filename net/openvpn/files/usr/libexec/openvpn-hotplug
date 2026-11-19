@@ -48,22 +48,31 @@ case "$script_type" in
 		nohostroute="$(uci_get network "$INTERFACE" nohostroute)"
 		proto_init_update "$dev" 1
 
-		[ -n "$ifconfig_local" ] && proto_add_ipv4_address "$ifconfig_local" "${ifconfig_netmask:-255.255.255.255}"
+		[ -n "$ifconfig_local" ] && proto_add_ipv4_address "$ifconfig_local" "${ifconfig_netmask:-255.255.255.255}" "" "${ifconfig_remote:-}"
 
 		[ -n "$trusted_ip" ] && [ "$nohostroute" != "1" ] && \
 			proto_add_host_dependency "$INTERFACE" "$trusted_ip"
 
-		[ -n "$route_vpn_gateway" ] && proto_add_ipv4_route "0.0.0.0" 0 "$route_vpn_gateway"
+		# A gateway may be provided for split routes; it does not request a default.
+		# OpenVPN exports this intent before up even when --route-noexec is set.
+		if [ "$route_redirect_gateway" = "1" ] && [ -n "$route_vpn_gateway" ]; then
+			if [ "$route_redirect_def1" = "1" ]; then
+				proto_add_ipv4_route "0.0.0.0" 1 "$route_vpn_gateway"
+				proto_add_ipv4_route "128.0.0.0" 1 "$route_vpn_gateway"
+			else
+				proto_add_ipv4_route "0.0.0.0" 0 "$route_vpn_gateway"
+			fi
+		fi
 
 		i=0
 		while :; do
 			i=$((i+1))
-			eval "net=\$route_network_$i mask=\$route_netmask_$i gw=\$route_gateway_$i"
+			eval "net=\$route_network_$i mask=\$route_netmask_$i gw=\$route_gateway_$i metric=\$route_metric_$i"
 			[ -z "$net" ] && break
 			[ -z "$mask" ] && continue
 
 			plen=$(mask2prefix "$mask")
-			proto_add_ipv4_route "$net" "$plen" "$gw"
+			proto_add_ipv4_route "$net" "$plen" "$gw" "" "$metric"
 		done
 
 		if [ "$IPV6" = "1" ]; then
@@ -77,18 +86,18 @@ case "$script_type" in
 			[ -n "$trusted_ip6" ] && [ "$nohostroute" != "1" ] && \
 				proto_add_host_dependency "$INTERFACE" "$trusted_ip6"
 
-			[ -n "$ifconfig_ipv6_remote" ] && proto_add_ipv6_route "::" 0 "$ifconfig_ipv6_remote"
+			# Only explicit/pushed IPv6 routes; OpenVPN expands IPv6 redirects.
 
 			i=0
 			while :; do
 				i=$((i+1))
-				eval "net=\$route_ipv6_network_$i gw=\$route_ipv6_gateway_$i"
+				eval "net=\$route_ipv6_network_$i gw=\$route_ipv6_gateway_$i metric=\$route_ipv6_metric_$i"
 				[ -z "$net" ] && break
 
 				read -r v6net v6plen <<-EOF
 					$(parse_cidr6 "$net" 128)
 				EOF
-				proto_add_ipv6_route "$v6net" "$v6plen" "$gw"
+				proto_add_ipv6_route "$v6net" "$v6plen" "$gw" "$metric"
 			done
 		fi
 

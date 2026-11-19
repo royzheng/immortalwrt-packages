@@ -9,6 +9,7 @@ config DOCKER_CHECK_CONFIG
 
 config DOCKER_CGROUP_OPTIONS
 	bool "Enable available kernel support for CGroupsV1"
+	default n if TARGET_mediatek_mt6990
 	default y
 	depends on PACKAGE_dockerd
 	select KERNEL_CGROUP_DEVICE

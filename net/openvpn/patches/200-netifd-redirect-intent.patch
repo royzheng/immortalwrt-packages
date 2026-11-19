@@ -1,0 +1,16 @@
+Expose IPv4 redirect intent even with --route-noexec. Netifd owns routes;
+route_vpn_gateway alone only identifies a next hop, not a default-route request.
+IPv6 redirect routes are already expanded by do_init_route_ipv6_list().
+
+--- a/src/openvpn/route.c
++++ b/src/openvpn/route.c
+@@ -1368,6 +1368,9 @@
+ void
+ setenv_routes(struct env_set *es, const struct route_list *rl)
+ {
++    setenv_int(es, "route_redirect_gateway", !!(rl->flags & RG_REROUTE_GW));
++    setenv_int(es, "route_redirect_def1", !!(rl->flags & RG_DEF1));
++
+     int i = 1;
+     struct route_ipv4 *r;
+     for (r = rl->routes; r; r = r->next)

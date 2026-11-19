@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=containerd
 PKG_VERSION:=2.2.5
-PKG_RELEASE:=1
+PKG_RELEASE:=3
 PKG_LICENSE:=Apache-2.0
 PKG_LICENSE_FILES:=LICENSE
 PKG_CPE_ID:=cpe:/a:linuxfoundation:containerd
@@ -31,7 +31,7 @@ define Package/containerd
   CATEGORY:=Utilities
   TITLE:=containerd container runtime
   URL:=https://containerd.io/
-  DEPENDS:=$(ARCH_DEPENDS) +btrfs-progs +runc
+  DEPENDS:=$(ARCH_DEPENDS) +!TARGET_mediatek_mt6990:btrfs-progs +runc
   MENU:=1
 endef
 
@@ -63,7 +63,8 @@ Build/Compile=$(call Build/Compile/Default)
 
 define Package/containerd/install
 	$(INSTALL_DIR) $(1)/usr/bin/
-	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/bin/{ctr,containerd,containerd-stress,containerd-shim-runc-v2} $(1)/usr/bin/
+	# AIR6 runtime image omits the ctr debug client and containerd-stress tool.
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/bin/{containerd,containerd-shim-runc-v2} $(1)/usr/bin/
 endef
 
 $(eval $(call BuildPackage,containerd))

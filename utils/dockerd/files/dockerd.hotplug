@@ -1,0 +1,2 @@
+#!/bin/sh
+case "$ACTION" in ifup|ifupdate|reload|restart) /etc/init.d/dockerd refresh_firewall;; esac
