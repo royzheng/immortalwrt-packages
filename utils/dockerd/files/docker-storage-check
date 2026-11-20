@@ -5,7 +5,8 @@ fail() { logger -t dockerd "Storage check: $1"; echo "$1" >&2; exit 1; }
 [ ! -S /run/containerd/containerd.sock ] || fail 'External containerd must be stopped before using guarded Docker storage'
 mountpoint="$(uci -q get dockerd.globals.data_mount)"
 root="$(uci -q get dockerd.globals.data_root)"
-[ -n "$mountpoint" ] && [ -n "$root" ] || fail 'Select a persistent data mount and data directory first'
+root="${root:-/opt/docker}"
+[ -n "$mountpoint" ] || fail 'Select a persistent data mount first'
 mountpoint="$(readlink -f "$mountpoint")"
 root="$(readlink -f "$root")"
 case "$mountpoint" in ''|/|/rom|/overlay|/tmp|/tmp/*|/mnt/vendor|/mnt/vendor/*) fail 'System and modem partitions are not Docker storage';; esac

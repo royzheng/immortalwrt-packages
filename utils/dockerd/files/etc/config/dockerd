@@ -7,7 +7,7 @@
 
 config globals 'globals'
 #	option alt_config_file '/etc/docker/daemon.json'
-	option enabled '0'
+	option enabled '1'
 	option data_mount '/opt'
 	option data_root '/opt/docker'
 	option storage_driver 'overlay2'
