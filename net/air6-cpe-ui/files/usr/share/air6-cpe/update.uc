@@ -89,7 +89,7 @@ try {
     let p=__popen('mkdir /tmp/air6-flash.lock 2>&1','r');p.read('all');if(p.close())die('Another flash is running');
     // Firmware images are written only after pivoting to RAM and detaching overlay.
     if(m.kind=='modem'){
-      run(['/bin/sh','-c','ifdown modem5g; for svc in air6-modem-status ql_ril_service mipc_wan.init mipc_submonitor.init; do /etc/init.d/$svc stop >/dev/null 2>&1 || true; done']);
+      run(['/bin/sh','-c','ifdown modem5g; for svc in air6-ca-daemon air6-modem-status ql_ril_service mipc_wan.init mipc_submonitor.init; do /etc/init.d/$svc stop >/dev/null 2>&1 || true; done']);
     }
     if(m.kind=='firmware')run(['/bin/dd','if='+part('misc'),'of='+base+'/misc-before.bin','bs=512']);
     for(let image in m.images){
